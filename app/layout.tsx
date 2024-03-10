@@ -15,11 +15,23 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const year = new Date().getFullYear();
+
   return (
     <html lang="en">
-      <body className={inter.className} style={{ height: "100vh" }}>
-        <NavBar/>
-        {children}
+      <body
+        className={`flex justify-center ${inter.className}`}
+        style={{ height: "100vh" }}
+      >
+        <div className="flex flex-col h-full">
+          <div className="flex-col  h-full ">
+            <div className="w-[706px]">
+              <NavBar />
+              <div className="px-6">{children}</div>
+            </div>
+          </div>
+          <p className="flex justify-center p-2">{`© ${year}`}</p>
+        </div>
       </body>
     </html>
   );

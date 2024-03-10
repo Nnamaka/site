@@ -7,14 +7,14 @@ export default function NavBar() {
   return (
     <div className="flex justify-center ">
       <div className="flex w-[706px] justify-between p-6">
-        <div className="Route flex space-x-[30px]">
+        <div className="Route flex space-x-[30px] text-[15px]">
           <Link href={"/"}>
             <h1>Home</h1>
           </Link>
           <Link href={"/apps"}>
             <h1>Apps</h1>
           </Link>
-          <Link href={"blog"}>
+          <Link href={"/blog"}>
             <h1>Blog</h1>
           </Link>
         </div>
