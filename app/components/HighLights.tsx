@@ -1,4 +1,4 @@
-import { highlights } from "../apps/dummyData/data";
+import { highlights } from "../dummyData/data";
 import { FiArrowUpRight } from "react-icons/fi";
 
 export default function HighLights() {

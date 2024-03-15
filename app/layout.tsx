@@ -1,6 +1,8 @@
+
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import NavBar from "./components/NavBar";
+// import { usePathname } from "next/navigation";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -16,12 +18,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   const year = new Date().getFullYear();
-
+  // console.log(usePathname())
   return (
     <html lang="en">
       <body
-        className={`flex justify-center ${inter.className}`}
-        style={{ height: "100vh" }}
+        className={`flex justify-center h-screen ${inter.className}`}
+        // style={{ height: "100vh" }}
       >
         <div className="flex flex-col h-full">
           <div className="flex-col  h-full ">
