@@ -6,7 +6,7 @@ export default function app() {
   return (
     <div className=" mt-[70px]">
       {apps.map((app) => (
-        <div key={app.slug} className="mb-[25px]">
+        <div key={app.slug} className="mb-[25px] ">
           <p className="font-bold">{app.title}</p>
           <p className="text-[14px]">{app.slug}</p>
           <div className="flex gap-[20px] text-[11px] mt-[6px]">

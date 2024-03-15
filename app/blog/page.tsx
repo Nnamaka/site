@@ -2,7 +2,7 @@ import { blogs } from "../dummyData/data";
 
 export default function blog() {
   return (
-    <div className="flex-col mt-[70px]">
+    <div className="flex-col mt-[70px] no-scrollbar">
       {blogs.map((data) => (
         <div key={data.slug} className="mb-[25px]">
           <p className="font-bold">{data.title}</p>
