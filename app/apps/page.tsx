@@ -4,7 +4,7 @@ import { RiTwitterXFill as TwitterIcon } from "react-icons/ri";
 
 export default function app() {
   return (
-    <div className=" mt-[70px]">
+    <div className=" mt-[70px] w-[307px] sm:w-[533px] md:w-[706px]">
       {apps.map((app) => (
         <div key={app.slug} className="mb-[25px] ">
           <p className="font-bold">{app.title}</p>
