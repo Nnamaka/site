@@ -10,7 +10,7 @@ export default function Home() {
         <p className="pt-3 w-[320px] sm:w-[414px] text-[16px]">
           - I spend my days coaxing algorithms to dance the tango, whispering sweet
           nothings to neural networks, and babysitting algorithms while
-          convincing them to play nice, but with more existential dread 😭💻
+          convincing them to play nice, but with more existential dread 🤖💻
         </p>
         <HighLights/>
       </div>

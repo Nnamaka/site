@@ -23,7 +23,7 @@ export default function RootLayout({
         className={`flex flex-col items-center justify-between h-dvh overflow-y-scroll no-scrollbar ${inter.className}`}
       >
         <div className="flex-col">
-          <div className="w-[430px] sm:w-[582px] ">
+          <div className="w-[430px] sm:w-[582px] md:w-[674px]">
             <NavBar />
             <div className="px-6">{children}</div>
           </div>
