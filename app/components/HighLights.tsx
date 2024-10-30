@@ -1,13 +1,15 @@
 import { highlights } from "../dummyData/data";
 import { FiArrowUpRight } from "react-icons/fi";
-
+import Link from "next/link";
 export default function HighLights() {
   return (
     <div className="pt-16">
       <p className="text-[18px] font-bold pt-1 mb-1">Highlights</p>
       {highlights.map((highlight, index) => (
-        <div
+        <Link
+          href={highlight.link}
           key={index}
+          target="_blank"
           className="flex justify-between items-center mt-[23px] px-2 py-1 bg-[#F3ECEC] rounded-md w-[302px] sm:w-[359px]"
         >
           <div>
@@ -17,7 +19,7 @@ export default function HighLights() {
             </p>
           </div>
           <FiArrowUpRight className="w-6 h-6" />
-        </div>
+        </Link>
       ))}
     </div>
   );

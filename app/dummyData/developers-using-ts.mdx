@@ -1,0 +1,65 @@
+---
+title: 'The Evolution of Modern Web Development'
+date: '2024-10-28'
+author: 'Alex Chen'
+---
+
+
+# The Evolution of Modern Web Development
+
+Modern web development has undergone a remarkable transformation in recent years. The introduction of frameworks like Next.js and advanced markup solutions like MDX has revolutionized how we build and maintain web applications.
+
+As developers, we constantly seek ways to improve our workflow and create more engaging user experiences. Let's explore some key aspects of modern web development.
+
+> "The best way to predict the future is to invent it." 
+> — Alan Kay
+
+## Code Example: TypeScript Component
+
+Here's a simple TypeScript React component that demonstrates modern practices:
+
+```typescript
+interface ButtonProps {
+  label: string;
+  onClick: () => void;
+}
+
+const Button: React.FC<ButtonProps> = ({ label, onClick }) => {
+  return (
+    <button 
+      className="px-4 py-2 bg-blue-500 text-white rounded"
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  );
+};
+```
+
+
+<div>
+  This is a blog post about <strong>mdx and typescript</strong>. <br/>
+  we'll learn how they co-exist, and how to write them properly to synergize with each other
+</div>
+
+<SyntaxHighlighter language='javascript' >
+{
+`
+// we are just displaying stuff
+
+const doStuff = () => {
+  return console.log('hey');
+}
+`
+}
+</SyntaxHighlighter>
+
+<LikeButton />
+
+## Interactive Poll
+
+What's your favorite web development framework? Cast your vote below!
+
+The integration of interactive components within markdown content showcases the power of MDX. It enables a seamless blend of static content and dynamic React components, making our documentation and blog posts more engaging and interactive than ever before.
+
+Feel free to experiment with these features in your own projects. The possibilities are endless when combining the simplicity of markdown with the power of React components.

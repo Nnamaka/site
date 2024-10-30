@@ -11,9 +11,9 @@ export default function NavBar() {
           <Link href={"/"}>
             <h1>Home</h1>
           </Link>
-          <Link href={"/apps"}>
+          {/* <Link href={"/apps"}>
             <h1>Apps</h1>
-          </Link>
+          </Link> */}
           <Link href={"/blog"}>
             <h1>Blog</h1>
           </Link>
@@ -23,9 +23,9 @@ export default function NavBar() {
           <Link href={`https://twitter.com/DNnamaka`} target="_blank" rel="noopener noreferrer">
             <TwitterIcon className="w-5 h-9" />
           </Link>
-          <Link href={'https://www.linkedin.com/in/dike-nnamaka/'} target="_blank" rel="noopener noreferrer">
+          {/* <Link href={'https://www.linkedin.com/in/dike-nnamaka/'} target="_blank" rel="noopener noreferrer">
             <LinkedinIcon className="w-5 h-9" />
-          </Link>
+          </Link> */}
           <Link href={'https://github.com/Nnamaka'} target="_blank" rel="noopener noreferrer">
             <GithubIcon className="w-5 h-9" />
           </Link>
