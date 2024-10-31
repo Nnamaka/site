@@ -10,15 +10,12 @@ export default async function page({ params }: { params: { slug: string } }) {
     post: { frontMatter, mdxSource },
   } = await getPostContent(params.slug);
 
-  if (!mdxSource) {
-    notFound();
-  }
+  
 
   return (
     <div>
       <div>
-        {/* <MdxContent source={mdxSource} components={components} /> */}
-        show here
+        <MdxContent source={mdxSource} components={components} />
       </div>
     </div>
   );
