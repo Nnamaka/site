@@ -17,7 +17,8 @@ export default async function page({ params }: { params: { slug: string } }) {
   return (
     <div>
       <div>
-        <MdxContent source={mdxSource} components={components} />
+        {/* <MdxContent source={mdxSource} components={components} /> */}
+        show here
       </div>
     </div>
   );
