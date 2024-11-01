@@ -1,5 +1,4 @@
 import { getPostContent } from "../server_actions/action";
-import { notFound } from 'next/navigation';
 import MdxContent from "../../components/MdxContent";
 import LikeButton from "@/app/components/LikeButton";
 
