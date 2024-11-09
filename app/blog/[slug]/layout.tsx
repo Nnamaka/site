@@ -1,14 +1,14 @@
 import Link from "next/link";
-import { MdOutlineArrowBack } from "react-icons/md";
+import { FaAngleLeft } from "react-icons/fa6";
 
 export default function MdxLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="prose">
-      <Link href={"/blog"} className="no-underline  space-x-1 items-center inline-flex mb-4">
-        <MdOutlineArrowBack className="h-4 w-4"/>
+      <Link href={"/blog"} className="no-underline  space-x-1 items-center inline-flex mb-[53px]">
+        <FaAngleLeft className="h-4 w-4"/>
         <div>Back to blog</div>
       </Link>
-      <div className="mt-3">{children}</div>
+      <div>{children}</div>
     </div>
   );
 }
