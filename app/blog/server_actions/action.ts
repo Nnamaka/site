@@ -13,7 +13,6 @@ export async function getPostContent(slug: string) {
   console.log("Attempting to read file from:", fullPath);
 
   const post = fs.readFileSync(fullPath, "utf-8");
-  // const post = fs.readFileSync(path.join("app", "blog", "posts", fileName));
 
   const { data: frontMatter, content } = matter(post);
   const mdxSource = await serialize(content);

@@ -4,7 +4,7 @@ import Link from "next/link";
 export default function HighLights() {
   return (
     <div className="pt-16">
-      <p className="text-[18px] font-bold pt-1 mb-1">Highlights</p>
+      <p className="text-[16px] font-bold pt-1 mb-1">Work Highlight</p>
       {highlights.map((highlight, index) => (
         <Link
           href={highlight.link}
