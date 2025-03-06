@@ -1,5 +1,14 @@
-import Image from "next/image";
+"use client";
+
+import { motion } from "framer-motion";
 import HighLights from "./components/HighLights";
+import Link from "next/link";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export default function Home() {
   return (
@@ -8,11 +17,53 @@ export default function Home() {
         <p className="text-[24px] font-bold pt-8">Nnamaka Dike</p>
 
         <p className="pt-3 w-[320px] sm:w-[414px] text-[16px]">
-          - I spend my days coaxing algorithms to dance the tango, whispering sweet
-          nothings to neural networks, and babysitting algorithms while
-          convincing them to play nice, but with more existential dread 🤖💻
+          - Hi, I build intelligent systems, refine neural networks, and craft data-driven solutions—always with a touch of {"  "}
+          <Link
+            href="https://medium.com/@nnamaka7"
+            target="_blank"
+            className="text-sm italic"
+          >
+            creativity
+          </Link>{" "}
         </p>
-        <HighLights/>
+        <TooltipProvider delayDuration={100}>
+          <p className="mt-4">
+          I share my thoughts here and{" "}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  href="https://medium.com/@nnamaka7"
+                  target="_blank"
+                  className="text-sm italic cursor-pointer font-extrabold relative transition-all duration-200 hover:underline hover:text-blue-600"
+                >
+                  there
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent className="bg-black text-white px-2 py-1 rounded-md text-xs">
+                Medium Articles
+              </TooltipContent>
+            </Tooltip>
+          </p>
+        </TooltipProvider>
+
+        <p className="mt-4">
+          <motion.span
+            whileHover={{ scale: 1.1, color: "#1DB954" }} // Spotify green color
+            whileTap={{ scale: 0.9 }}
+            transition={{ type: "spring", stiffness: 200 }}
+            className="cursor-pointer font-bold text-sm italic"
+            onClick={() =>
+              window.open(
+                "https://open.spotify.com/track/6OljU9rEfG2u5mGhqmiqSJ",
+                "_blank"
+              )
+            }
+          >
+            Afrobeat 
+          </motion.span>{"   "}
+          is often playing in the background while I build.
+        </p>
+        <HighLights />
       </div>
     </main>
   );
