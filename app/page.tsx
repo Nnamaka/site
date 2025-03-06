@@ -14,9 +14,10 @@ export default function Home() {
   return (
     <main>
       <div className="mt-8">
-        <p className="text-[24px] font-bold pt-8">Nnamaka Dike</p>
-
-        <p className="pt-3 w-[320px] sm:w-[414px] text-[16px]">
+        <p className="text-[20px] font-bold pt-8">Nnamaka Dike</p>
+        <p className="mb-2 border-b border-gray-300 pb-1 inline-block">Machine Learning Engineer</p>
+        
+        <p className="mt-3 w-[320px] sm:w-[414px] text-[16px]">
           - Hi, I build intelligent systems, refine neural networks, and craft data-driven solutions—always with a touch of {"  "}
           <Link
             href="https://medium.com/@nnamaka7"
