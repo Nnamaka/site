@@ -20,14 +20,14 @@ export default function NavBar() {
         </div>
 
         <div className="Icons flex space-x-5 items-center">
-          <Link href={`https://twitter.com/DNnamaka`} target="_blank" rel="noopener noreferrer">
-            <TwitterIcon className="w-5 h-9" />
-          </Link>
-          {/* <Link href={'https://www.linkedin.com/in/dike-nnamaka/'} target="_blank" rel="noopener noreferrer">
+          <Link href={'https://www.linkedin.com/in/dike-nnamaka/'} target="_blank" rel="noopener noreferrer">
             <LinkedinIcon className="w-5 h-9" />
-          </Link> */}
+          </Link>
           <Link href={'https://github.com/Nnamaka'} target="_blank" rel="noopener noreferrer">
             <GithubIcon className="w-5 h-9" />
+          </Link>
+          <Link href={`https://twitter.com/DNnamaka`} target="_blank" rel="noopener noreferrer">
+            <TwitterIcon className="w-5 h-9" />
           </Link>
         </div>
       </div>
