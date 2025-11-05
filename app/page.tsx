@@ -55,12 +55,12 @@ export default function Home() {
             className="cursor-pointer font-bold text-sm italic"
             onClick={() =>
               window.open(
-                "https://open.spotify.com/track/6OljU9rEfG2u5mGhqmiqSJ",
+                "https://open.spotify.com/track/7msfmSm4KbVnIds5DvsGzT?si=df42b2af5cd64ac9",
                 "_blank"
               )
             }
           >
-            Afrobeat 
+            Soft music 
           </motion.span>{"   "}
           is often playing in the background while I build.
         </p>
