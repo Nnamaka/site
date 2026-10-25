@@ -1,6 +1,7 @@
 {
   "name": "namaka-monorepo",
   "private": true,
+  
   "scripts": {
     "dev": "turbo run dev",
     "build": "turbo run build",
@@ -9,5 +10,5 @@
   "devDependencies": {
     "turbo": "^2.11.10"
   },
-  "packageManager": "pnpm@9.0.0"
+  "packageManager": "pnpm@9.15.4"
 }
