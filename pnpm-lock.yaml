@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@types/react-syntax-highlighter>@types/react': ^18
+
 importers:
 
   .:
