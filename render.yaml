@@ -1,0 +1,65 @@
+# Render (free) web service running the central supervisor natively, no Docker:
+# it starts every backend on an internal port, then the public gateway, then the keep-alive jobs.
+# Database: Supabase (not hosted on Render).
+services:
+  - type: web
+    name: nnamaka-api
+    runtime: node
+    plan: free
+    region: frankfurt
+    buildCommand: >-
+      corepack enable &&
+      pnpm install --frozen-lockfile --prod=false &&
+      pnpm --filter @nnamaka/fynd-api build &&
+      pnpm --filter @nnamaka/central build
+    startCommand: pnpm --filter @nnamaka/central start:all
+    healthCheckPath: /health
+    autoDeploy: true
+    buildFilter:
+      paths:
+        - backend/**
+        - packages/**
+        - pnpm-lock.yaml
+        - render.yaml
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: SUPERVISOR_MODE
+        value: prod
+      # gateway
+      - key: CORS_ORIGINS
+        value: https://nnamaka.com,https://*.nnamaka.com
+      # Supabase: transaction pooler (6543) for the app, direct/session (5432) for migrations + keep-alive
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      # fynd
+      - key: APP_URL
+        value: https://fynd.nnamaka.com
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
+      - key: MAX_ACCOUNTS
+        value: "7"
+      - key: INVITE_EMAILS
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        value: Fynd <fynd@nnamaka.com>
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        value: FyndJobsBot
+      - key: TELEGRAM_MODE
+        value: webhook
+      - key: TELEGRAM_WEBHOOK_SECRET
+        generateValue: true
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: AGENT_ENABLED
+        value: "true"

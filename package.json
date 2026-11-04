@@ -1,14 +1,29 @@
 {
   "name": "namaka-monorepo",
   "private": true,
-  
   "scripts": {
     "dev": "turbo run dev",
+    "dev:fynd": "turbo run dev --filter=@nnamaka/fynd --filter=@nnamaka/central",
+    "dev:backend": "pnpm --filter @nnamaka/central dev",
+    "build:backend": "pnpm --filter @nnamaka/fynd-api build && pnpm --filter @nnamaka/central build",
+    "start:backend": "pnpm --filter @nnamaka/central start:all",
+    "keepalive": "pnpm --filter @nnamaka/central keepalive",
     "build": "turbo run build",
-    "lint": "turbo run lint"
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "db:up": "docker compose up -d postgres",
+    "db:deploy": "pnpm --filter @nnamaka/fynd-api db:deploy",
+    "db:down": "docker compose down",
+    "db:migrate": "pnpm --filter @nnamaka/fynd-api db:migrate",
+    "db:seed": "pnpm --filter @nnamaka/fynd-api db:seed",
+    "db:studio": "pnpm --filter @nnamaka/fynd-api db:studio",
+    "docker:api": "docker build -f backend/Dockerfile -t nnamaka-api . && docker run --rm -p 10000:10000 --env-file backend/fynd/.env -e PORT=10000 -e DATABASE_URL=postgresql://fynd:fynd@host.docker.internal:5432/fynd nnamaka-api"
   },
   "devDependencies": {
     "turbo": "^2.11.10"
   },
-  "packageManager": "pnpm@9.15.4"
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=22"
+  }
 }

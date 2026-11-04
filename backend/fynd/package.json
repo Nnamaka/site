@@ -1,0 +1,42 @@
+{
+  "name": "@nnamaka/fynd-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "files": ["dist", "prisma"],
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "prisma generate && tsup",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "postinstall": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "prisma db seed",
+    "db:studio": "prisma studio",
+    "db:reset": "prisma migrate reset",
+    "agent:once": "tsx scripts/run-agent-once.ts",
+    "telegram:webhook": "tsx scripts/set-telegram-webhook.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.7",
+    "@hono/zod-validator": "^0.4.2",
+    "@nnamaka/fynd-shared": "workspace:*",
+    "@prisma/client": "^6.16.0",
+    "better-auth": "^1.3.7",
+    "dotenv": "^16.4.7",
+    "hono": "^4.6.14",
+    "prisma": "^6.16.0",
+    "unpdf": "^0.12.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

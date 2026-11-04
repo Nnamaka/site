@@ -1,0 +1,322 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Supabase: DATABASE_URL = transaction pooler (6543, ?pgbouncer=true), DIRECT_URL = session/direct (5432) for migrations.
+  // Local Postgres: set both to the same URL.
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/* ───────────── better-auth core tables ───────────── */
+
+model User {
+  id            String    @id @default(cuid())
+  name          String    @default("")
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+
+  campaigns     Campaign[]
+  sources       Source[]
+  jobs          Job[]
+  baseCv        BaseCv?
+  notifications NotificationSettings?
+  telegram      TelegramLink?
+
+  @@map("user")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+/* ───────────── Fynd domain ───────────── */
+
+enum CampaignStatus {
+  RUNNING
+  PAUSED
+  ENDED
+}
+
+enum JobStatus {
+  PREPARING
+  PREPARE_FAILED
+  AWAITING
+  APPLYING
+  APPLIED
+  APPLIED_MANUALLY
+  APPLY_FAILED
+  SKIPPED
+}
+
+enum JobOutcome {
+  NONE
+  REPLIED
+  REJECTED
+  INTERVIEW
+  OFFER
+}
+
+enum IssueKind {
+  EXTRACT
+  APPLY
+}
+
+enum SourceKind {
+  GREENHOUSE
+  LEVER
+  ASHBY
+  REMOTEOK
+  CAREER_PAGE
+}
+
+enum SourceHealth {
+  HEALTHY
+  EXTRACT_FAILING
+  APPLY_FAILING
+}
+
+enum DocumentKind {
+  CV
+  RESUME
+  COVER_LETTER
+}
+
+model Campaign {
+  id               String         @id @default(cuid())
+  userId           String
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name             String
+  status           CampaignStatus @default(RUNNING)
+  locations        String[]       @default(["Remote · Worldwide"])
+  seniority        String         @default("Senior")
+  minAts           Int            @default(75)
+  postedWithinDays Int            @default(7)
+  autoApply        Boolean        @default(false)
+  startedAt        DateTime       @default(now())
+  endedAt          DateTime?
+  roles            Role[]
+  keywords         Keyword[]
+  jobs             Job[]
+  flow             Flow?
+
+  @@index([userId, status])
+}
+
+model Role {
+  id            String           @id @default(cuid())
+  campaignId    String
+  campaign      Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  title         String
+  monthlyTarget Int              @default(2000)
+  position      Int              @default(0)
+  createdAt     DateTime         @default(now())
+  variants      RoleVariant[]
+  suggestions   RoleSuggestion[]
+  jobs          Job[]
+
+  @@index([campaignId])
+}
+
+model RoleVariant {
+  id     String @id @default(cuid())
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  title  String
+
+  @@unique([roleId, title])
+}
+
+model RoleSuggestion {
+  id     String @id @default(cuid())
+  roleId String
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  title  String
+
+  @@unique([roleId, title])
+}
+
+model Keyword {
+  id         String   @id @default(cuid())
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  value      String
+  createdAt  DateTime @default(now())
+
+  @@unique([campaignId, value])
+}
+
+model Source {
+  id        String       @id @default(cuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind      SourceKind
+  name      String
+  config    Json         @default("{}")
+  enabled   Boolean      @default(true)
+  health    SourceHealth @default(HEALTHY)
+  lastError String?
+  lastRunAt DateTime?
+  createdAt DateTime     @default(now())
+  jobs      Job[]
+
+  @@unique([userId, kind, name])
+}
+
+model Job {
+  id              String      @id @default(cuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaignId      String
+  campaign        Campaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  roleId          String?
+  role            Role?       @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  sourceId        String
+  source          Source      @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  externalId      String
+  url             String
+  title           String
+  company         String
+  location        String?
+  salary          String?
+  description     String      @db.Text
+  postedAt        DateTime?
+  foundAt         DateTime    @default(now())
+  status          JobStatus   @default(PREPARING)
+  outcome         JobOutcome  @default(NONE)
+  atsScore        Int?
+  baseAtsScore    Int?
+  atsBreakdown    Json?
+  matchedKeywords String[]    @default([])
+  missingKeywords String[]    @default([])
+  issueKind       IssueKind?
+  issueMessage    String?
+  appliedAt       DateTime?
+  documents       Document[]
+  events          JobEvent[]
+
+  @@unique([userId, sourceId, externalId])
+  @@index([userId, status])
+  @@index([campaignId, foundAt])
+}
+
+model Document {
+  id        String       @id @default(cuid())
+  jobId     String
+  job       Job          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  kind      DocumentKind
+  fileName  String
+  content   String       @db.Text
+  atsScore  Int?
+  createdAt DateTime     @default(now())
+
+  @@unique([jobId, kind])
+}
+
+model JobEvent {
+  id        String   @id @default(cuid())
+  jobId     String
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  type      String
+  message   String
+  createdAt DateTime @default(now())
+
+  @@index([jobId, createdAt])
+}
+
+model Flow {
+  id         String   @id @default(cuid())
+  campaignId String   @unique
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  nodes      Json
+  edges      Json
+  updatedAt  DateTime @updatedAt
+}
+
+model BaseCv {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fileName    String
+  mimeType    String
+  size        Int
+  data        Bytes
+  text        String   @db.Text
+  atsBaseline Int?
+  uploadedAt  DateTime @default(now())
+}
+
+model NotificationSettings {
+  userId            String  @id
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  telegramEnabled   Boolean @default(true)
+  telegramShowStats Boolean @default(true)
+  emailEnabled      Boolean @default(false)
+}
+
+model TelegramLink {
+  userId   String   @id
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chatId   String   @unique
+  username String?
+  linkedAt DateTime @default(now())
+}
+
+model TelegramPending {
+  chatId    String    @id
+  email     String?
+  codeHash  String?
+  expiresAt DateTime?
+  attempts  Int       @default(0)
+  updatedAt DateTime  @updatedAt
+}
