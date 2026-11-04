@@ -7,11 +7,15 @@ import LikeButton from "./LikeButton";
 import TeX from "@matejmazur/react-katex";
 import "katex/dist/katex.min.css";
 
+import type { ComponentType } from "react";
+import type { SyntaxHighlighterProps } from "react-syntax-highlighter";
+
 const SyntaxHighlighter = dynamic(
-  () => import("react-syntax-highlighter").then((mod) => mod.Prism),
-  {
-    ssr: false,
-  }
+  () =>
+    import("react-syntax-highlighter").then(
+      (mod) => mod.Prism as unknown as ComponentType<SyntaxHighlighterProps>,
+    ),
+  { ssr: false },
 );
 
 const InlineMath = ({ children }: { children: React.ReactNode }) => (
