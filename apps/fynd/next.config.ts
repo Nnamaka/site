@@ -1,8 +1,6 @@
 import type { NextConfig } from "next";
 
-// Every /api/* request is proxied server-side to the central gateway (→ backend/fynd).
-// The browser only ever talks to this origin, so auth cookies are first-party and no CORS is needed.
-const api = (process.env.FYND_API_URL ?? "http://localhost:4000/fynd").replace(/\/$/, "");
+// All /api/* requests are forwarded at runtime by app/api/[...path]/route.ts (reads FYND_API_URL per request).
 
 const nextConfig: NextConfig = {
   experimental: {
@@ -18,9 +16,6 @@ const nextConfig: NextConfig = {
         as: "*.css",
       },
     },
-  },
-  async rewrites() {
-    return [{ source: "/api/:path*", destination: `${api}/api/:path*` }];
   },
 };
 

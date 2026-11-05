@@ -1,8 +1,179 @@
 // src/index.ts
 import { serve } from "@hono/node-server";
 
-// ../../packages/fynd-shared/src/index.ts
+// src/env.ts
+import "dotenv/config";
 import { z } from "zod";
+var flag = (fallback) => z.enum(["true", "false"]).default(fallback).transform((v) => v === "true");
+var schema = z.object({
+  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  FYND_HOST: z.string().default("127.0.0.1"),
+  FYND_PORT: z.coerce.number().default(4001),
+  DATABASE_URL: z.string().min(1),
+  APP_URL: z.string().url(),
+  TRUSTED_ORIGINS: z.string().default(""),
+  BETTER_AUTH_SECRET: z.string().min(32, "must be at least 32 characters"),
+  MAX_ACCOUNTS: z.coerce.number().int().min(1).default(7),
+  INVITE_EMAILS: z.string().default(""),
+  RESEND_API_KEY: z.string().optional(),
+  MAIL_FROM: z.string().default("Fynd <fynd@example.com>"),
+  TELEGRAM_BOT_TOKEN: z.string().optional(),
+  TELEGRAM_BOT_USERNAME: z.string().default("FyndJobsBot"),
+  TELEGRAM_MODE: z.enum(["polling", "webhook", "off"]).default("polling"),
+  TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
+  // AI provider for document tailoring. auto = first key set (Anthropic → OpenAI → Gemini), others are fallbacks.
+  AI_PROVIDER: z.enum(["auto", "anthropic", "openai", "gemini", "template"]).default("auto"),
+  // Model for the primary provider. Empty = provider default (see agent/llm.ts). TAILOR_MODEL is the old name.
+  AI_MODEL: z.string().optional().transform((v) => v || process.env.TAILOR_MODEL || void 0),
+  AI_MIN_INTERVAL_MS: z.coerce.number().int().min(0).optional(),
+  ANTHROPIC_API_KEY: z.string().optional(),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
+  GEMINI_API_KEY: z.string().optional(),
+  AGENT_ENABLED: flag("false"),
+  AGENT_INTERVAL_MINUTES: z.coerce.number().min(1).default(30),
+  AGENT_MAX_NEW_PER_RUN: z.coerce.number().min(1).default(25)
+});
+var parsed = schema.safeParse(process.env);
+if (!parsed.success) {
+  console.error("[fynd] invalid environment:", parsed.error.flatten().fieldErrors);
+  process.exit(1);
+}
+var env = parsed.data;
+var isProd = env.NODE_ENV === "production";
+var csv = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
+
+// src/lib/util.ts
+var DAY = 864e5;
+var startOfDayUTC = (d = /* @__PURE__ */ new Date()) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+var startOfMonthUTC = (d = /* @__PURE__ */ new Date()) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+var daysInMonthUTC = (d = /* @__PURE__ */ new Date()) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+var addDays = (d, n) => new Date(d.getTime() + n * DAY);
+var isoDay = (d) => d.toISOString().slice(0, 10);
+var errMsg = (e) => (e instanceof Error ? e.message : String(e)).slice(0, 500);
+
+// src/agent/llm.ts
+var DEFAULT_MODEL = {
+  anthropic: "claude-sonnet-4-5",
+  openai: "gpt-4.1-mini",
+  gemini: "gemini-2.5-flash"
+};
+var DEFAULT_MIN_INTERVAL_MS = { anthropic: 0, openai: 0, gemini: 7e3 };
+var keyFor = (p) => ({ anthropic: env.ANTHROPIC_API_KEY, openai: env.OPENAI_API_KEY, gemini: env.GEMINI_API_KEY })[p];
+function configuredProviders() {
+  const all = ["anthropic", "openai", "gemini"];
+  const withKey = all.filter((p) => keyFor(p));
+  if (env.AI_PROVIDER === "template") return [];
+  if (env.AI_PROVIDER === "auto") return withKey;
+  return [env.AI_PROVIDER, ...withKey.filter((p) => p !== env.AI_PROVIDER)].filter((p) => keyFor(p));
+}
+var modelFor = (p, isPrimary) => isPrimary && env.AI_MODEL ? env.AI_MODEL : DEFAULT_MODEL[p];
+var lastCall = {};
+async function pace(p) {
+  const gap = env.AI_MIN_INTERVAL_MS ?? DEFAULT_MIN_INTERVAL_MS[p];
+  const wait = (lastCall[p] ?? 0) + gap - Date.now();
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  lastCall[p] = Date.now();
+}
+var RetryableError = class extends Error {
+  constructor(message, retryAfterMs) {
+    super(message);
+    this.retryAfterMs = retryAfterMs;
+  }
+  retryAfterMs;
+};
+async function post(url, headers, body, label) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(12e4)
+  });
+  if (res.status === 429 || res.status === 503 || res.status === 529) {
+    const ra = Number(res.headers.get("retry-after"));
+    throw new RetryableError(`${label} ${res.status}`, Number.isFinite(ra) && ra > 0 ? ra * 1e3 : 2e4);
+  }
+  if (!res.ok) throw new Error(`${label} ${res.status}: ${(await res.text()).slice(0, 300)}`);
+  return res.json();
+}
+async function anthropic(model, i) {
+  const data = await post(
+    "https://api.anthropic.com/v1/messages",
+    { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+    { model, max_tokens: i.maxTokens ?? 6e3, system: i.system, messages: [{ role: "user", content: i.user }] },
+    "Anthropic"
+  );
+  return data.content.filter((b) => b.type === "text").map((b) => b.text ?? "").join("");
+}
+async function openai(model, i) {
+  const data = await post(
+    `${env.OPENAI_BASE_URL.replace(/\/$/, "")}/chat/completions`,
+    { authorization: `Bearer ${env.OPENAI_API_KEY}` },
+    {
+      model,
+      max_completion_tokens: i.maxTokens ?? 6e3,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: i.system },
+        { role: "user", content: i.user }
+      ]
+    },
+    "OpenAI"
+  );
+  return data.choices[0]?.message.content ?? "";
+}
+async function gemini(model, i) {
+  const data = await post(
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+    { "x-goog-api-key": env.GEMINI_API_KEY },
+    {
+      systemInstruction: { parts: [{ text: i.system }] },
+      contents: [{ role: "user", parts: [{ text: i.user }] }],
+      generationConfig: { responseMimeType: "application/json", maxOutputTokens: i.maxTokens ?? 8192, temperature: 0.4 }
+    },
+    "Gemini"
+  );
+  if (data.promptFeedback?.blockReason) throw new Error(`Gemini blocked the prompt: ${data.promptFeedback.blockReason}`);
+  return data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
+}
+var CALL = { anthropic, openai, gemini };
+function parseJson(text) {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start < 0 || end < start) throw new Error("No JSON object in response");
+  return JSON.parse(text.slice(start, end + 1));
+}
+async function completeJson(input, validate = () => true) {
+  const providers = configuredProviders();
+  if (!providers.length) return null;
+  const errors = [];
+  for (const [idx, p] of providers.entries()) {
+    const model = modelFor(p, idx === 0);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await pace(p);
+        const value = parseJson(await CALL[p](model, input));
+        if (!validate(value)) throw new Error("Incomplete response");
+        return { value, provider: p, model };
+      } catch (e) {
+        if (e instanceof RetryableError && attempt < 3) {
+          await new Promise((r) => setTimeout(r, e.retryAfterMs));
+          continue;
+        }
+        errors.push(`${p}: ${errMsg(e)}`);
+        break;
+      }
+    }
+  }
+  throw new Error(errors.join(" | "));
+}
+function describeAi() {
+  const p = configuredProviders();
+  return p.length ? `${p[0]} (${modelFor(p[0], true)})${p.length > 1 ? `, fallback ${p.slice(1).join(", ")}` : ""}` : "templates (no AI key)";
+}
+
+// ../../packages/fynd-shared/src/index.ts
+import { z as z2 } from "zod";
 var MAX_ROLES = 3;
 var AUTO_APPLY_MIN_ATS = 90;
 var JOB_OUTCOMES = ["NONE", "REPLIED", "REJECTED", "INTERVIEW", "OFFER"];
@@ -14,46 +185,46 @@ var OUTCOME_LABEL = {
   OFFER: "Offer"
 };
 var JOB_TABS = ["all", "awaiting", "applied", "issues"];
-var jobsQuerySchema = z.object({
-  tab: z.enum(JOB_TABS).default("all"),
-  role: z.string().default("all"),
-  q: z.string().trim().default(""),
-  page: z.coerce.number().int().min(1).default(1),
-  pageSize: z.coerce.number().int().min(1).max(100).default(10)
+var jobsQuerySchema = z2.object({
+  tab: z2.enum(JOB_TABS).default("all"),
+  role: z2.string().default("all"),
+  q: z2.string().trim().default(""),
+  page: z2.coerce.number().int().min(1).default(1),
+  pageSize: z2.coerce.number().int().min(1).max(100).default(10)
 });
-var overviewQuerySchema = z.object({ range: z.enum(["month", "7d"]).default("month") });
-var outcomeSchema = z.object({ outcome: z.enum(JOB_OUTCOMES) });
-var campaignPatchSchema = z.object({
-  name: z.string().trim().min(1).max(60).optional(),
-  status: z.enum(["RUNNING", "PAUSED"]).optional(),
-  locations: z.array(z.string().min(1)).max(6).optional(),
-  seniority: z.string().optional(),
-  minAts: z.number().int().min(0).max(100).optional(),
-  postedWithinDays: z.number().int().min(1).max(60).optional(),
-  autoApply: z.boolean().optional()
+var overviewQuerySchema = z2.object({ range: z2.enum(["month", "7d"]).default("month") });
+var outcomeSchema = z2.object({ outcome: z2.enum(JOB_OUTCOMES) });
+var campaignPatchSchema = z2.object({
+  name: z2.string().trim().min(1).max(60).optional(),
+  status: z2.enum(["RUNNING", "PAUSED"]).optional(),
+  locations: z2.array(z2.string().min(1)).max(6).optional(),
+  seniority: z2.string().optional(),
+  minAts: z2.number().int().min(0).max(100).optional(),
+  postedWithinDays: z2.number().int().min(1).max(60).optional(),
+  autoApply: z2.boolean().optional()
 });
-var titleSchema = z.object({ title: z.string().trim().min(2).max(80) });
-var rolePatchSchema = z.object({
-  title: z.string().trim().min(2).max(80).optional(),
-  monthlyTarget: z.number().int().min(1).max(1e5).optional()
+var titleSchema = z2.object({ title: z2.string().trim().min(2).max(80) });
+var rolePatchSchema = z2.object({
+  title: z2.string().trim().min(2).max(80).optional(),
+  monthlyTarget: z2.number().int().min(1).max(1e5).optional()
 });
-var keywordSchema = z.object({ value: z.string().trim().min(1).max(40) });
-var flowNodeSchema = z.object({
-  id: z.string(),
-  position: z.object({ x: z.number(), y: z.number() }),
-  data: z.object({ title: z.string(), sub: z.string(), icon: z.string() })
+var keywordSchema = z2.object({ value: z2.string().trim().min(1).max(40) });
+var flowNodeSchema = z2.object({
+  id: z2.string(),
+  position: z2.object({ x: z2.number(), y: z2.number() }),
+  data: z2.object({ title: z2.string(), sub: z2.string(), icon: z2.string() })
 });
-var flowEdgeSchema = z.object({ id: z.string(), source: z.string(), target: z.string() });
-var flowSchema = z.object({ nodes: z.array(flowNodeSchema).max(60), edges: z.array(flowEdgeSchema).max(200) });
-var sourceConfigSchema = z.object({
-  boards: z.array(z.string().trim().min(1)).optional(),
-  urls: z.array(z.string().url()).optional()
+var flowEdgeSchema = z2.object({ id: z2.string(), source: z2.string(), target: z2.string() });
+var flowSchema = z2.object({ nodes: z2.array(flowNodeSchema).max(60), edges: z2.array(flowEdgeSchema).max(200) });
+var sourceConfigSchema = z2.object({
+  boards: z2.array(z2.string().trim().min(1)).optional(),
+  urls: z2.array(z2.string().url()).optional()
 });
-var sourcePatchSchema = z.object({ enabled: z.boolean().optional(), config: sourceConfigSchema.optional() });
-var notificationsPatchSchema = z.object({
-  telegramEnabled: z.boolean().optional(),
-  telegramShowStats: z.boolean().optional(),
-  emailEnabled: z.boolean().optional()
+var sourcePatchSchema = z2.object({ enabled: z2.boolean().optional(), config: sourceConfigSchema.optional() });
+var notificationsPatchSchema = z2.object({
+  telegramEnabled: z2.boolean().optional(),
+  telegramShowStats: z2.boolean().optional(),
+  emailEnabled: z2.boolean().optional()
 });
 var DEFAULT_FLOW = {
   nodes: [
@@ -77,55 +248,9 @@ var DEFAULT_FLOW = {
 
 // src/db.ts
 import { PrismaClient } from "@prisma/client";
-
-// src/env.ts
-import "dotenv/config";
-import { z as z2 } from "zod";
-var flag = (fallback) => z2.enum(["true", "false"]).default(fallback).transform((v) => v === "true");
-var schema = z2.object({
-  NODE_ENV: z2.enum(["development", "production", "test"]).default("development"),
-  FYND_HOST: z2.string().default("127.0.0.1"),
-  FYND_PORT: z2.coerce.number().default(4001),
-  DATABASE_URL: z2.string().min(1),
-  APP_URL: z2.string().url(),
-  TRUSTED_ORIGINS: z2.string().default(""),
-  BETTER_AUTH_SECRET: z2.string().min(32, "must be at least 32 characters"),
-  MAX_ACCOUNTS: z2.coerce.number().int().min(1).default(7),
-  INVITE_EMAILS: z2.string().default(""),
-  RESEND_API_KEY: z2.string().optional(),
-  MAIL_FROM: z2.string().default("Fynd <fynd@example.com>"),
-  TELEGRAM_BOT_TOKEN: z2.string().optional(),
-  TELEGRAM_BOT_USERNAME: z2.string().default("FyndJobsBot"),
-  TELEGRAM_MODE: z2.enum(["polling", "webhook", "off"]).default("polling"),
-  TELEGRAM_WEBHOOK_SECRET: z2.string().optional(),
-  ANTHROPIC_API_KEY: z2.string().optional(),
-  TAILOR_MODEL: z2.string().default("claude-sonnet-4-5"),
-  AGENT_ENABLED: flag("false"),
-  AGENT_INTERVAL_MINUTES: z2.coerce.number().min(1).default(30),
-  AGENT_MAX_NEW_PER_RUN: z2.coerce.number().min(1).default(25)
-});
-var parsed = schema.safeParse(process.env);
-if (!parsed.success) {
-  console.error("[fynd] invalid environment:", parsed.error.flatten().fieldErrors);
-  process.exit(1);
-}
-var env = parsed.data;
-var isProd = env.NODE_ENV === "production";
-var csv = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
-
-// src/db.ts
 var globalForPrisma = globalThis;
 var db = globalForPrisma.prisma ?? new PrismaClient({ log: isProd ? ["error"] : ["warn", "error"] });
 if (!isProd) globalForPrisma.prisma = db;
-
-// src/lib/util.ts
-var DAY = 864e5;
-var startOfDayUTC = (d = /* @__PURE__ */ new Date()) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-var startOfMonthUTC = (d = /* @__PURE__ */ new Date()) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
-var daysInMonthUTC = (d = /* @__PURE__ */ new Date()) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
-var addDays = (d, n) => new Date(d.getTime() + n * DAY);
-var isoDay = (d) => d.toISOString().slice(0, 10);
-var errMsg = (e) => (e instanceof Error ? e.message : String(e)).slice(0, 500);
 
 // src/services/telegram.ts
 import { createHash, randomInt } from "crypto";
@@ -563,12 +688,14 @@ var adapters = {
 
 // src/agent/tailor.ts
 async function tailor(input) {
-  if (env.ANTHROPIC_API_KEY) {
-    try {
-      return await tailorWithClaude(input);
-    } catch (e) {
-      console.warn("[tailor] Claude failed, using template:", errMsg(e));
-    }
+  try {
+    const out = await completeJson(
+      { system: SYSTEM, user: userPrompt(input), maxTokens: 6e3 },
+      (v) => Boolean(v.cv && v.coverLetter)
+    );
+    if (out) return { cv: out.value.cv, resume: out.value.resume ?? out.value.cv, coverLetter: out.value.coverLetter };
+  } catch (e) {
+    console.warn("[tailor] AI failed, using template:", errMsg(e));
   }
   return tailorTemplate(input);
 }
@@ -578,19 +705,7 @@ Rules:
 - Reorder, rephrase and emphasise to match the job description and the listed keywords where truthful.
 - Output Markdown. CV: full, ATS-friendly, single column. Resume: one page summary. Cover letter: under 350 words, specific to the company.
 - Respond with JSON only: {"cv": string, "resume": string, "coverLetter": string}`;
-async function tailorWithClaude(i) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-    signal: AbortSignal.timeout(9e4),
-    body: JSON.stringify({
-      model: env.TAILOR_MODEL,
-      max_tokens: 6e3,
-      system: SYSTEM,
-      messages: [
-        {
-          role: "user",
-          content: `Candidate: ${i.candidateName}
+var userPrompt = (i) => `Candidate: ${i.candidateName}
 
 Keywords: ${i.keywords.join(", ")}
 
@@ -602,18 +717,7 @@ ${i.job.description.slice(0, 12e3)}
 
 <base_cv>
 ${i.cvText.slice(0, 12e3) || "(no CV uploaded)"}
-</base_cv>`
-        }
-      ]
-    })
-  });
-  if (!res.ok) throw new Error(`Anthropic ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  const data = await res.json();
-  const text = data.content.filter((b) => b.type === "text").map((b) => b.text ?? "").join("");
-  const json = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
-  if (!json.cv || !json.coverLetter) throw new Error("Incomplete response");
-  return { cv: json.cv, resume: json.resume ?? json.cv, coverLetter: json.coverLetter };
-}
+</base_cv>`;
 function tailorTemplate({ job, cvText, keywords, candidateName }) {
   const relevant = keywords.filter((k) => job.description.toLowerCase().includes(k.toLowerCase()));
   const summary = `${job.title} candidate with hands-on experience in ${relevant.slice(0, 5).join(", ") || "the core skills this role needs"}.`;
@@ -877,19 +981,29 @@ var auth = betterAuth({
   session: { expiresIn: 60 * 60 * 24 * 365, updateAge: 60 * 60 * 24 },
   advanced: { cookiePrefix: "fynd" },
   rateLimit: { enabled: true, window: 60, max: 30 },
+  // Log every auth failure with its cause; a bare 500 in the browser is otherwise undiagnosable.
+  logger: { level: isProd ? "error" : "debug" },
+  onAPIError: {
+    onError: (error) => console.error("[auth]", error)
+  },
   plugins: [
     emailOTP({
       otpLength: 6,
       expiresIn: 600,
       async sendVerificationOTP({ email, otp }) {
         await assertCanRegister(email);
-        await sendMail({
-          to: email,
-          subject: `${otp} is your Fynd code`,
-          text: `Your Fynd sign-in code is ${otp}.
+        try {
+          await sendMail({
+            to: email,
+            subject: `${otp} is your Fynd code`,
+            text: `Your Fynd sign-in code is ${otp}.
 
 It expires in 10 minutes. If you didn't request it, ignore this email.`
-        });
+          });
+        } catch (e) {
+          console.error("[auth] sending the sign-in code failed:", e);
+          throw new APIError("BAD_GATEWAY", { message: `Couldn't send the code email: ${e.message}` });
+        }
       }
     })
   ],
@@ -1492,7 +1606,7 @@ app.onError((err, c) => {
 
 // src/index.ts
 var server = serve({ fetch: app.fetch, port: env.FYND_PORT, hostname: env.FYND_HOST }, (info) => {
-  console.log(`[fynd] http://${env.FYND_HOST}:${info.port}  (agent ${env.AGENT_ENABLED ? "on" : "off"}, telegram ${env.TELEGRAM_BOT_TOKEN ? env.TELEGRAM_MODE : "not configured"})`);
+  console.log(`[fynd] http://${env.FYND_HOST}:${info.port}  (agent ${env.AGENT_ENABLED ? "on" : "off"}, telegram ${env.TELEGRAM_BOT_TOKEN ? env.TELEGRAM_MODE : "not configured"}, ai ${describeAi()})`);
 });
 startAgent();
 startTelegram();

@@ -3,7 +3,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError } from "better-auth/api";
 import { emailOTP } from "better-auth/plugins";
 import { db } from "./db";
-import { csv, env } from "./env";
+import { csv, env, isProd } from "./env";
 import { sendMail } from "./lib/mail";
 import { bootstrapUser } from "./services/bootstrap";
 
@@ -33,17 +33,27 @@ export const auth = betterAuth({
   session: { expiresIn: 60 * 60 * 24 * 365, updateAge: 60 * 60 * 24 },
   advanced: { cookiePrefix: "fynd" },
   rateLimit: { enabled: true, window: 60, max: 30 },
+  // Log every auth failure with its cause; a bare 500 in the browser is otherwise undiagnosable.
+  logger: { level: isProd ? "error" : "debug" },
+  onAPIError: {
+    onError: (error) => console.error("[auth]", error),
+  },
   plugins: [
     emailOTP({
       otpLength: 6,
       expiresIn: 600,
       async sendVerificationOTP({ email, otp }) {
         await assertCanRegister(email);
-        await sendMail({
-          to: email,
-          subject: `${otp} is your Fynd code`,
-          text: `Your Fynd sign-in code is ${otp}.\n\nIt expires in 10 minutes. If you didn't request it, ignore this email.`,
-        });
+        try {
+          await sendMail({
+            to: email,
+            subject: `${otp} is your Fynd code`,
+            text: `Your Fynd sign-in code is ${otp}.\n\nIt expires in 10 minutes. If you didn't request it, ignore this email.`,
+          });
+        } catch (e) {
+          console.error("[auth] sending the sign-in code failed:", e);
+          throw new APIError("BAD_GATEWAY", { message: `Couldn't send the code email: ${(e as Error).message}` });
+        }
       },
     }),
   ],

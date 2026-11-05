@@ -48,7 +48,7 @@ import cors from "cors";
 import express from "express";
 import { createProxyMiddleware } from "http-proxy-middleware";
 var PORT = Number(process.env.PORT ?? 4e3);
-var HOST = process.env.HOST ?? "0.0.0.0";
+var HOST = process.env.HOST || void 0;
 var allowed = (process.env.CORS_ORIGINS ?? "http://localhost:3000,http://localhost:3001").split(",").map((s) => s.trim()).filter(Boolean).map((p) => new RegExp("^" + p.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[a-z0-9-]+") + "$", "i"));
 function createGateway() {
   const app = express();
@@ -111,7 +111,7 @@ function createGateway() {
 }
 function startGateway() {
   return createGateway().listen(PORT, HOST, () => {
-    console.log(`[central] gateway on http://${HOST}:${PORT}`);
+    console.log(`[central] gateway on http://${HOST ?? "localhost"}:${PORT}`);
     for (const s of services) console.log(`[central]   ${s.prefix.padEnd(12)} \u2192 ${s.target}`);
   });
 }

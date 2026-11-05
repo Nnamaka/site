@@ -8,7 +8,8 @@ import { keepaliveStatus } from "./keepalive";
 import { services } from "./services";
 
 const PORT = Number(process.env.PORT ?? 4000);
-const HOST = process.env.HOST ?? "0.0.0.0";
+// Unset = all interfaces, IPv4 and IPv6 (Windows resolves "localhost" to ::1 first).
+const HOST = process.env.HOST || undefined;
 
 // Comma-separated; "*" matches one subdomain label, e.g. https://*.nnamaka.com
 const allowed = (process.env.CORS_ORIGINS ?? "http://localhost:3000,http://localhost:3001")
@@ -93,8 +94,8 @@ export function createGateway() {
 }
 
 export function startGateway(): Server {
-  return createGateway().listen(PORT, HOST, () => {
-    console.log(`[central] gateway on http://${HOST}:${PORT}`);
+  return createGateway().listen(PORT, HOST as string, () => {
+    console.log(`[central] gateway on http://${HOST ?? "localhost"}:${PORT}`);
     for (const s of services) console.log(`[central]   ${s.prefix.padEnd(12)} → ${s.target}`);
   });
 }
